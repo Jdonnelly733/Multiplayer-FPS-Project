@@ -8,340 +8,293 @@ using System;
 using Photon.Realtime;
 using UnityEngine.SceneManagement;
 
-namespace Proelium
+//Class to manage lobbys and the server select/create screen
+public class LobbyManager : Photon.PunBehaviour
 {
+    //Strings for the version of the game, the name of the player
+    public string i_gameVersion = Application.version;
+    public string i_selectedName = "null";
 
-    public class LobbyManager : Photon.PunBehaviour
+    public TextMeshProUGUI textCharacterName;
+    public TextMeshProUGUI textNoOneOnline;
+    public TextMeshProUGUI textWorldSelection;
+
+    public TMP_InputField inputfieldServerName;
+    public TMP_InputField inputfieldName;
+    public TMP_InputField inputfieldServerMaxPlayer;
+    public TMP_InputField inputfieldServerCode;
+
+    public TMP_Dropdown dropdownGamemode;
+    public TMP_Dropdown dropdownJoinGamemode;
+
+    public TMP_Dropdown dropdownMaps;
+    public TMP_Dropdown dropdownMapsJoin;
+
+    public GameObject scrollviewServerListing;
+    public GameObject panelLoading;
+    public GameObject panelConnectionError;
+    public GameObject panelCreateServer;
+    public GameObject panelJoinViaCode;
+    public GameObject panelServerView;
+    public GameObject panelSelectName;
+
+    public GameObject panelCreating;
+    public GameObject panelJoining;
+
+    public bool loadedSucsesfully;
+
+    private void Awake()
     {
+        panelCreating.SetActive(false);
+        panelJoining.SetActive(false);
 
-        public string i_gameVersion = "game";
-        public string i_selectedName = "null";
-        public bool i_singleplayer;
+        panelLoading.SetActive(true);
+        textNoOneOnline.gameObject.SetActive(false);
+        panelConnectionError.SetActive(false);
+        PhotonNetwork.ConnectUsingSettings(i_gameVersion);
 
-        public TextMeshProUGUI textCharacterName;
-        public TextMeshProUGUI textNoOneOnline;
-        public TextMeshProUGUI textWorldSelection;
+        StartCoroutine(ConnectionPing());
+    }
 
-        public TMP_InputField inputfieldServerName;
-        public TMP_InputField inputfieldName;
-        public TMP_InputField inputfieldServerMaxPlayer;
-        public TMP_InputField inputfieldServerCode;
+    public void RetryConnection()
+    {
+        SceneManager.LoadScene("lobbyScene");
+    }
 
-        public TMP_Dropdown dropdownGamemode;
-        public TMP_Dropdown dropdownJoinGamemode;
+    public override void OnReceivedRoomListUpdate()
+    {
+        base.OnReceivedRoomListUpdate();
 
-        public TMP_Dropdown dropdownMaps;
-        public TMP_Dropdown dropdownMapsJoin;
-
-        public GameObject scrollviewServerListing;
-        public GameObject panelLoading;
-        public GameObject panelConnectionError;
-        public GameObject panelCreateServer;
-        public GameObject panelJoinViaCode;
-        public GameObject panelServerView;
-        public GameObject panelSelectName;
-
-        public GameObject panelCreating;
-        public GameObject panelJoining;
-
-        public bool loadedSucsesfully;
-
-        private void Awake()
+        foreach (Transform child in scrollviewServerListing.transform)
         {
-            if (!i_singleplayer)
-            {
-                panelCreating.SetActive(false);
-                panelJoining.SetActive(false);
-            }
-
-            //PhotonNetwork.JoinLobby();
-            if (i_singleplayer)
-            {
-                PhotonNetwork.ConnectUsingSettings(i_gameVersion);
-            }
-            else
-            {
-
-                panelLoading.SetActive(true);
-                textNoOneOnline.gameObject.SetActive(false);
-                panelConnectionError.SetActive(false);
-                PhotonNetwork.ConnectUsingSettings(i_gameVersion);
-
-                StartCoroutine(ConnectionPing());
-            }
+            GameObject.Destroy(child.gameObject);
         }
 
-        public void RetryConnection()
+        RoomInfo[] returnedServers = GetActiveServers();
+
+        if (returnedServers.Length <= 0)
         {
-            SceneManager.LoadScene("lobbyScene");
+            textNoOneOnline.gameObject.SetActive(true);
         }
-
-        public override void OnReceivedRoomListUpdate()
+        else
         {
-            base.OnReceivedRoomListUpdate();
-
-            foreach (Transform child in scrollviewServerListing.transform)
+            textNoOneOnline.gameObject.SetActive(false);
+            for (int i = 0; i < returnedServers.Length; i++)
             {
-                GameObject.Destroy(child.gameObject);
-            }
+                GameObject newServerListing = Instantiate(Resources.Load<GameObject>("Prefabs/a_defaultServerSlot"), scrollviewServerListing.transform);
 
-            RoomInfo[] returnedServers = GetActiveServers();
-
-            if (returnedServers.Length <= 0)
-            {
-                textNoOneOnline.gameObject.SetActive(true);
-            }
-            else
-            {
-                textNoOneOnline.gameObject.SetActive(false);
-                for (int i = 0; i < returnedServers.Length; i++)
-                {
-                    GameObject newServerListing = Instantiate(Resources.Load<GameObject>("Prefabs/a_defaultServerSlot"), scrollviewServerListing.transform);
-
-                    newServerListing.GetComponent<ServerSlot>().UIBlock = panelJoining;
-                    newServerListing.GetComponent<ServerSlot>().InitializeGUI(returnedServers[i]);
-                }
+                newServerListing.GetComponent<ServerSlot>().UIBlock = panelJoining;
+                newServerListing.GetComponent<ServerSlot>().InitializeGUI(returnedServers[i]);
             }
         }
+    }
 
-        IEnumerator ConnectionPing()
+    IEnumerator ConnectionPing()
+    {
+        yield return new WaitForSeconds(5.0f);
+
+        if (!loadedSucsesfully)
         {
-            yield return new WaitForSeconds(5.0f);
-
-            if (!loadedSucsesfully)
-            {
-                panelConnectionError.SetActive(true);
-                panelLoading.SetActive(false);
-            }
-        }
-
-        public void SetUsername()
-        {
-            if (inputfieldName.text.Length >= 3)
-            {
-                i_selectedName = inputfieldName.text;
-                textCharacterName.text = inputfieldName.text;
-                PhotonNetwork.playerName = i_selectedName;
-                SetGUIActiveStatus(0);
-            }
-        }
-
-        public void SetGUIActiveStatus(int val)
-        {
-            if (val == -1)
-            {
-                //Select Name Screen
-                panelSelectName.SetActive(true);
-                panelCreateServer.SetActive(false);
-                panelJoinViaCode.SetActive(false);
-                panelServerView.SetActive(false);
-            }
-            if (val == 0)
-            {
-                //Return to main server menu
-                panelSelectName.SetActive(false);
-                panelCreateServer.SetActive(false);
-                panelJoinViaCode.SetActive(false);
-                panelServerView.SetActive(true);
-            }
-            else if (val == 1)
-            {
-                //Go to creation menu
-                panelSelectName.SetActive(false);
-                panelCreateServer.SetActive(true);
-                panelJoinViaCode.SetActive(false);
-                panelServerView.SetActive(false);
-                OnGamemodeSelected_Create();
-            }
-            else if (val == 2)
-            {
-                //Go to join via code menu
-                panelSelectName.SetActive(false);
-                panelCreateServer.SetActive(false);
-                panelJoinViaCode.SetActive(true);
-                panelServerView.SetActive(false);
-                OnGamemodeSelected_Join();
-            }
-        }
-
-        private void OnConnectedToMaster()
-        {
-            loadedSucsesfully = true;
-
-            if (i_singleplayer)
-            {
-                return;
-            }
-
-            SetGUIActiveStatus(-1);
-            PhotonNetwork.JoinLobby();
+            panelConnectionError.SetActive(true);
             panelLoading.SetActive(false);
         }
+    }
 
-        private RoomInfo[] GetActiveServers()
+    public void SetUsername()
+    {
+        if (inputfieldName.text.Length >= 3)
         {
-            RoomInfo[] Rooms = PhotonNetwork.GetRoomList();
-
-            return Rooms;
+            i_selectedName = inputfieldName.text;
+            textCharacterName.text = inputfieldName.text;
+            PhotonNetwork.playerName = i_selectedName;
+            SetGUIActiveStatus(0);
         }
+    }
 
-        private void OnJoinedLobby()
+    public void SetGUIActiveStatus(int val)
+    {
+        if (val == -1)
         {
-
+            //Select Name Screen
+            panelSelectName.SetActive(true);
+            panelCreateServer.SetActive(false);
+            panelJoinViaCode.SetActive(false);
+            panelServerView.SetActive(false);
         }
-
-        private void OnDisconnectedFromPhoton()
+        if (val == 0)
         {
-            //Debug.Log("Lost Connection To Photon");
+            //Return to main server menu
+            panelSelectName.SetActive(false);
+            panelCreateServer.SetActive(false);
+            panelJoinViaCode.SetActive(false);
+            panelServerView.SetActive(true);
         }
-
-        public void Start()
+        else if (val == 1)
         {
-            if (i_singleplayer == true)
-            {
-                PhotonNetwork.offlineMode = true;
-                CreateServer();
-            }
-            else
-            {
-                List<TMP_Dropdown.OptionData> options = new List<TMP_Dropdown.OptionData>();
-
-                //ADD DATA
-                TMP_Dropdown.OptionData newOption = new TMP_Dropdown.OptionData();
-                newOption.text = "Example";
-                options.Add(newOption);
-
-                dropdownGamemode.ClearOptions();
-                dropdownGamemode.AddOptions(options);
-
-                dropdownJoinGamemode.ClearOptions();
-                dropdownJoinGamemode.AddOptions(options);
-            }
+            //Go to creation menu
+            panelSelectName.SetActive(false);
+            panelCreateServer.SetActive(true);
+            panelJoinViaCode.SetActive(false);
+            panelServerView.SetActive(false);
+            OnGamemodeSelected_Create();
         }
-
-        public Texture2D hoverTexture;
-        public Texture2D unHoverTexture;
-
-        public void SetCursorType(int id)
+        else if (val == 2)
         {
-            if (id == 0)
-            {
-                Cursor.SetCursor(unHoverTexture, new Vector2(0, 0), CursorMode.Auto);
-            }
-            else
-            {
-                Cursor.SetCursor(hoverTexture, new Vector2(0, 0), CursorMode.Auto);
-            }
+            //Go to join via code menu
+            panelSelectName.SetActive(false);
+            panelCreateServer.SetActive(false);
+            panelJoinViaCode.SetActive(true);
+            panelServerView.SetActive(false);
+            OnGamemodeSelected_Join();
         }
+    }
 
-        public void JoinRandom()
-        {
-            PhotonNetwork.JoinRandomRoom();
-        }
+    private void OnConnectedToMaster()
+    {
+        loadedSucsesfully = true;
 
-        public void CreateServer()
-        {
+        SetGUIActiveStatus(-1);
+        PhotonNetwork.JoinLobby();
+        panelLoading.SetActive(false);
+    }
 
-            if (!i_singleplayer)
-            {
-                if (Int64.Parse(inputfieldServerMaxPlayer.text) > 0 && inputfieldServerName.text.Length >= 2)
-                {
-                    if (!i_singleplayer)
-                    {
-                        panelCreating.SetActive(true);
-                        panelJoining.SetActive(false);
-                    }
-                    RoomOptions roomop = new RoomOptions
-                    {
-                        IsOpen = true,
-                        IsVisible = true,
-                        MaxPlayers = (byte)(Int64.Parse(inputfieldServerMaxPlayer.text))
-                    };
+    private RoomInfo[] GetActiveServers()
+    {
+        RoomInfo[] Rooms = PhotonNetwork.GetRoomList();
 
-                    if (dropdownJoinGamemode.options[dropdownGamemode.value].text == "1v1")
-                    {
-                        roomop.MaxPlayers = (byte)2;
-                    }
+        return Rooms;
+    }
 
-                    PhotonNetwork.CreateRoom(inputfieldServerName.text.ToString() + "&" + dropdownGamemode.options[dropdownGamemode.value].text + "&" + dropdownMaps.options[dropdownMaps.value].text, roomop, TypedLobby.Default);
-                    //PhotonNetwork.LoadLevel("multTest");
-                }
-            }
-            else
-            {
-                if (!i_singleplayer)
-                {
-                    panelCreating.SetActive(true);
-                    panelJoining.SetActive(false);
-                }
-                PhotonNetwork.CreateRoom("server.localSingleplayer");
-                //PhotonNetwork.LoadLevel("multTest");
-            }
-        }
-
-        public void JoinRoom()
-        {
-            panelCreating.SetActive(false);
-            panelJoining.SetActive(true);
-            RoomOptions roomOptions = new RoomOptions();
-            //roomOptions.MaxPlayers = (byte)lobbyMaxPlayers;
-
-            PhotonNetwork.JoinRoom(inputfieldServerCode.text + "&" + dropdownJoinGamemode.options[dropdownGamemode.value].text + "&" + dropdownMapsJoin.options[dropdownMapsJoin.value].text);
-        }
-
-        private void OnJoinedRoom()
-        {
-            string[] roomDat = PhotonNetwork.room.Name.Split('&');
-            print("Server Name: " + PhotonNetwork.room.Name);
-
-            string levelToLoad = roomDat[2];
-
-            if (roomDat[1] == "Sandbox")
-            {
-
-            }
-            else if (roomDat[1] == "1v1")
-            {
-
-            }
-            PhotonNetwork.LoadLevel(levelToLoad);
-        }
-
-        public void OnGamemodeSelected_Create()
-        {
-            dropdownGamemode.interactable = true;
-
-            List<TMP_Dropdown.OptionData> options = new List<TMP_Dropdown.OptionData>();
-
-            string gamemodeName = dropdownGamemode.options[dropdownGamemode.value].text;
-
-            TMP_Dropdown.OptionData newOption = new TMP_Dropdown.OptionData();
-            newOption.text = "Example";
-            options.Add(newOption);
-
-            dropdownMaps.ClearOptions();
-            dropdownMaps.AddOptions(options);
-            dropdownMaps.interactable = true;
-
-            inputfieldServerMaxPlayer.interactable = true;
-            inputfieldServerMaxPlayer.text = 0.ToString();
-        }
-
-        public void OnGamemodeSelected_Join()
-        {
-            dropdownGamemode.interactable = true;
-
-            List<TMP_Dropdown.OptionData> options = new List<TMP_Dropdown.OptionData>();
-
-            TMP_Dropdown.OptionData newOption = new TMP_Dropdown.OptionData();
-            newOption.text = "Example";
-            options.Add(newOption);
-
-            dropdownMapsJoin.ClearOptions();
-            dropdownMapsJoin.AddOptions(options);
-            dropdownMapsJoin.interactable = true;
-        }
+    private void OnJoinedLobby()
+    {
 
     }
-    
+
+    private void OnDisconnectedFromPhoton()
+    {
+        //Debug.Log("Lost Connection To Photon");
+    }
+
+    public void Start()
+    {
+        List<TMP_Dropdown.OptionData> options = new List<TMP_Dropdown.OptionData>();
+
+        //ADD DATA
+        TMP_Dropdown.OptionData newOption = new TMP_Dropdown.OptionData();
+        newOption.text = "Example";
+        options.Add(newOption);
+
+        dropdownGamemode.ClearOptions();
+        dropdownGamemode.AddOptions(options);
+
+        dropdownJoinGamemode.ClearOptions();
+        dropdownJoinGamemode.AddOptions(options);
+    }
+
+    public Texture2D hoverTexture;
+    public Texture2D unHoverTexture;
+
+    public void SetCursorType(int id)
+    {
+        if (id == 0)
+        {
+            Cursor.SetCursor(unHoverTexture, new Vector2(0, 0), CursorMode.Auto);
+        }
+        else
+        {
+            Cursor.SetCursor(hoverTexture, new Vector2(0, 0), CursorMode.Auto);
+        }
+    }
+
+    public void JoinRandom()
+    {
+        PhotonNetwork.JoinRandomRoom();
+    }
+
+    public void CreateServer()
+    {
+        if (Int64.Parse(inputfieldServerMaxPlayer.text) > 0 && inputfieldServerName.text.Length >= 2)
+        {
+            panelCreating.SetActive(true);
+            panelJoining.SetActive(false);
+            RoomOptions roomop = new RoomOptions
+            {
+                IsOpen = true,
+                IsVisible = true,
+                MaxPlayers = (byte)(Int64.Parse(inputfieldServerMaxPlayer.text))
+            };
+
+            if (dropdownJoinGamemode.options[dropdownGamemode.value].text == "1v1")
+            {
+                roomop.MaxPlayers = (byte)2;
+            }
+
+            PhotonNetwork.CreateRoom(inputfieldServerName.text.ToString() + "&" + dropdownGamemode.options[dropdownGamemode.value].text + "&" + dropdownMaps.options[dropdownMaps.value].text, roomop, TypedLobby.Default);
+            //PhotonNetwork.LoadLevel("multTest");
+        }
+    }
+
+    public void JoinRoom()
+    {
+        panelCreating.SetActive(false);
+        panelJoining.SetActive(true);
+        RoomOptions roomOptions = new RoomOptions();
+        //roomOptions.MaxPlayers = (byte)lobbyMaxPlayers;
+
+        PhotonNetwork.JoinRoom(inputfieldServerCode.text + "&" + dropdownJoinGamemode.options[dropdownGamemode.value].text + "&" + dropdownMapsJoin.options[dropdownMapsJoin.value].text);
+    }
+
+    private void OnJoinedRoom()
+    {
+        string[] roomDat = PhotonNetwork.room.Name.Split('&');
+        print("Server Name: " + PhotonNetwork.room.Name);
+
+        string levelToLoad = roomDat[2];
+
+        if (roomDat[1] == "Sandbox")
+        {
+
+        }
+        else if (roomDat[1] == "1v1")
+        {
+
+        }
+        PhotonNetwork.LoadLevel(levelToLoad);
+    }
+
+    public void OnGamemodeSelected_Create()
+    {
+        dropdownGamemode.interactable = true;
+
+        List<TMP_Dropdown.OptionData> options = new List<TMP_Dropdown.OptionData>();
+
+        string gamemodeName = dropdownGamemode.options[dropdownGamemode.value].text;
+
+        TMP_Dropdown.OptionData newOption = new TMP_Dropdown.OptionData();
+        newOption.text = "Example";
+        options.Add(newOption);
+
+        dropdownMaps.ClearOptions();
+        dropdownMaps.AddOptions(options);
+        dropdownMaps.interactable = true;
+
+        inputfieldServerMaxPlayer.interactable = true;
+        inputfieldServerMaxPlayer.text = 0.ToString();
+    }
+
+    public void OnGamemodeSelected_Join()
+    {
+        dropdownGamemode.interactable = true;
+
+        List<TMP_Dropdown.OptionData> options = new List<TMP_Dropdown.OptionData>();
+
+        TMP_Dropdown.OptionData newOption = new TMP_Dropdown.OptionData();
+        newOption.text = "Example";
+        options.Add(newOption);
+
+        dropdownMapsJoin.ClearOptions();
+        dropdownMapsJoin.AddOptions(options);
+        dropdownMapsJoin.interactable = true;
+    }
+
 }
